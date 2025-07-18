@@ -63,3 +63,39 @@ programmer.
 *** Implementation
 
 We will use babashka to implement this script.
+
+How will the project look like? We need a config file per project, or a global
+config file.
+#+begin_src clojure
+  {:shipclojure-datom {:cwd "~/workspace/cool-dir"
+                       :github/repo "shipclojure/shipclojure-datom"
+                       :cron "* * * *"
+                       :todo/type :org
+                       :todo/file "todo.ord"}}
+#+end_src
+
+
+We will add support for further configuration like PR format, dispatch agent cli
+command etc. We won't implement org parsing. We'll just pass the todo file to
+the AI along with the github issues and let it choose for itself what it wants
+to work on.
+
+*** Config
+
+In the home directory there will be a .todo-goblin.edn that checks for the per
+repository configuration. as shown above.
+
+
+*** CLI config
+
+We need something like
+
+$ =tgbl config init=  # parses config and does confirmation with the user about period,
+repo information and more. This should be added to zsh config ... maybe
+
+$ =tgbl config show= # shows current configuration pretty printed
+
+$ =tgbl status= # Shows active agents if any
+
+
+*** Potential ideas

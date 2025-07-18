@@ -90,10 +90,10 @@ Currently working on this task.
 (deftest test-generate-task-branch-name-special-chars
   (testing "generate-task-branch-name handles special characters"
     (let [task {:title "Fix API endpoint: /users/{id} returns 500!"
-                :id "task-abc123"}]
-      (let [branch-name (todo/generate-task-branch-name task)]
-        (is (re-matches #"tgbl/[a-z0-9-]+" branch-name))
-        (is (not (re-find #"[^a-z0-9/-]" branch-name)))))))
+                :id "task-abc123"}
+          branch-name (todo/generate-task-branch-name task)]
+      (is (re-matches #"tgbl/[a-z0-9-]+" branch-name))
+      (is (not (re-find #"[^a-z0-9/-]" branch-name))))))
 
 (deftest test-get-tasks
   (testing "get-tasks dispatches correctly based on todo/type"
@@ -102,12 +102,12 @@ Currently working on this task.
                       :todo/file "test-todo.org"}
           github-config {:todo/type :github
                          :github/repo "user/repo"
-                         :github/issues-label "todo"}]
+                         :github/issues-label "todo"}
+          org-tasks (todo/get-tasks org-config "test-project")]
 
       ;; Test org type (actual parsing)
-      (let [org-tasks (todo/get-tasks org-config "test-project")]
-        (is (seq org-tasks))
-        (is (every? #(= :org (:source %)) org-tasks)))
+      (is (seq org-tasks))
+      (is (every? #(= :org (:source %)) org-tasks))
 
       ;; Test github type returns empty list (since we're not mocking gh CLI)
       (let [github-tasks (todo/get-tasks github-config "test-project")]

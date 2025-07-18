@@ -1,0 +1,65 @@
+#+title:  System that auto does tasks based on a cron job and a todo list
+
+A cron job would start claude code with tools to fetch the git remote repo, it's
+active PRs, and the TODO list.
+
+The task to Claude code would be:
+
+
+*** Claude Prompt
+
+You are a code assistant that every day looks at the active todo list and active
+TODOs, picks one TODO and proposes a fix for it. Once you decide on one task,
+open a draft PR to showcase you are working on it, to avoid conflicts with other
+people or AIs choosing the same task. You will follow the same rule too. If a
+draft PR is open for a task, it means somebody is already working on it.
+
+When you implement a task, make sure to write tests for that task, respecting
+the notion of *significant other file*.
+
+A significant other file is a file that is related to the main file. The logic
+for finding significant other files is described below:
+
+1. For the file =src/clj/saas/core.clj= the significant other file can be
+   =test/clj/saas/core_test.clj=. This file contains all the relevant tests for
+   that particular namespace.
+2. For the file =src/cljc/saas/ui/button.cljc= one significant other file can
+   be =portfolio/saas/ui/button_scenes.cljs= that define UI scenes for the
+   button, that showcase how it renders based on different props. =button.cljc=
+   can have multiple significant other files.
+   =test/cljc/saas/ui/button_test.cljc= can also be a significant other file. In
+   the =button_scenes.cljs= we concern ourselves with how the button /looks/, in
+   the tests, we concern ourselves with how the button /behaves/.
+3. You should always add tests and make sure they pass for your new
+   functionality.
+
+
+**** PR title format
+
+1. DRAFT: =🤖[AI TASK STARTED] {task} {started-at date}=
+2. COMPLETE: =✅[AI TASK COMPLETE] {task} {completed-at date}=
+3. FAIL: =❌[AI TASK FAILED] {task} {stopped-at date}=
+
+Decide a task has failed once either you tried to fix an issue 10-15 times and
+you still can't figure it out.
+
+*** Pre requisite tasks
+
+1. Ensure user is logged in with =gh= cli
+2. Go to the repository local root
+3. Fetch latest main branch of the repository
+4. Check configured todo system:
+   - org mode file (todo.org)
+   - github issues
+5. From the list of TODOs, filter out the ones that already have PRs
+6. Choose a task
+8. Start claude code cli with the task name, description, prompt from above
+
+
+When the process for claude to start a task starts, we will create another git
+worktree, so the AI worker doesn't interract with another agent or a human
+programmer.
+
+*** Implementation
+
+We will use babashka to implement this script.

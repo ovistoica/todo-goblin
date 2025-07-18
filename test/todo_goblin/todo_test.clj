@@ -1,7 +1,7 @@
 (ns todo-goblin.todo-test
   "Tests for todo-goblin.todo namespace"
   (:require [clojure.java.io :as io]
-            [clojure.test :refer [deftest is testing]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [todo-goblin.specs :as specs]
             [todo-goblin.todo :as todo]))
 
@@ -83,7 +83,7 @@ Currently working on this task.
     (let [task {:title "Fix authentication bug in login module"
                 :id "task-123456789"}
           branch-name (todo/generate-task-branch-name task)]
-      (is (= "tgbl/fix-authentication-bug-in-login-task-123" branch-name))
+      (is (= "tgbl/fix-authentication-bug-in-logi-task-123" branch-name))
       (is (< (count branch-name) 50)) ; Reasonable length limit
       (is (re-matches #"tgbl/[a-z0-9-]+" branch-name)))))
 

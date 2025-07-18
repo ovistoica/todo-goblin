@@ -1,8 +1,8 @@
 (ns todo-goblin.ai
   "Claude Code CLI integration for AI task execution"
   (:require [babashka.process :as process]
-            [clojure.string :as str]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [clojure.string :as str]))
 
 (def claude-code-prompt
   "Base prompt template for Claude Code"
@@ -35,45 +35,57 @@ Your current task is:")
   "Check if Claude Code CLI is available"
   []
   (try
-    (let [result (process/sh ["claude-code" "--version"])]
+    (let [result (process/sh ["claude" "--version"])]
       (zero? (:exit result)))
-    (catch Exception e
+    (catch Exception _e
       false)))
 
 (defn run-claude-code
-  "Execute Claude Code CLI in the specified worktree"
+  "Execute Claude Code CLI in the specified worktree with streaming output"
   [worktree-path task & {:keys [context-files timeout-ms]
                          :or {context-files [] timeout-ms 300000}}] ; 5 minute default
   (when-not (check-claude-code-available)
     (throw (ex-info "Claude Code CLI not available" {:worktree-path worktree-path})))
 
   (try
-    (let [prompt (generate-task-prompt task context-files)
-          temp-prompt-file (str worktree-path "/.todo-goblin-prompt.txt")]
-
-      ;; Write prompt to temporary file
-      (spit temp-prompt-file prompt)
+    (let [prompt (generate-task-prompt task context-files)]
 
       (println "Starting Claude Code AI assistant...")
       (println "Working directory:" worktree-path)
       (println "Task:" (:title task))
+      (println "\n=== Claude Code Output ===")
 
-      ;; Execute Claude Code with the prompt
-      (let [result (process/sh ["claude-code" "--prompt-file" temp-prompt-file]
-                               {:dir worktree-path
-                                :timeout timeout-ms})]
+      ;; Create process with streaming output
+      (let [proc (process/process {:dir worktree-path
+                                   :err :inherit} ; stderr goes to console immediately
+                                  "claude" "--print" prompt)
+            reader (io/reader (:out proc))
+            output-lines (atom [])]
 
-        ;; Clean up prompt file
-        (io/delete-file temp-prompt-file true)
+        ;; Read and display output as it streams
+        (try
+          (loop []
+            (when-let [line (.readLine reader)]
+              (println line) ; Display immediately
+              (swap! output-lines conj line)
+              (recur)))
+          (catch java.io.IOException e
+            (println "Stream reading interrupted:" (.getMessage e))))
 
-        (if (zero? (:exit result))
-          {:success true
-           :output (:out result)
-           :message "AI task execution completed successfully"}
-          {:success false
-           :error (:err result)
-           :output (:out result)
-           :exit-code (:exit result)})))
+        ;; Wait for process completion 
+        (let [result @proc
+              collected-output (str/join "\n" @output-lines)]
+
+          (println "=== End Claude Code Output ===\n")
+
+          (if (zero? (:exit result))
+            {:success true
+             :output collected-output
+             :message "AI task execution completed successfully"}
+            {:success false
+             :error "Claude Code execution failed"
+             :output collected-output
+             :exit-code (:exit result)}))))
 
     (catch java.util.concurrent.TimeoutException e
       {:success false

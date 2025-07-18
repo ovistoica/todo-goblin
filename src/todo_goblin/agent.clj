@@ -154,15 +154,42 @@
         (if-not (:success worktree-result)
           (cleanup-on-failure context (str "Worktree creation failed: " (:error worktree-result)))
 
-          ;; Step 2: Create draft PR
-          (let [pr-result (create-draft-pr context)]
-            (if-not (:success pr-result)
-              (cleanup-on-failure context (str "PR creation failed: " (:error pr-result)))
+          ;; Step 2: Execute AI task
+          (let [ai-result (execute-ai-task context)]
+            (if-not (:success ai-result)
+              (cleanup-on-failure context (str "AI task execution failed: " (:error ai-result)))
 
-              ;; Step 3: Execute AI task
-              (let [ai-result (execute-ai-task context)]
-                ;; Step 4: Finalize based on result
-                (finalize-task context ai-result pr-result))))))
+              ;; Step 3: Commit and push changes
+              (let [{:keys [branch-name worktree-path]} context
+                    commit-msg (str "🤖 Implement: " (:title task) "\n\nTask ID: " (:id task))
+                    push-result (worktree/commit-and-push worktree-path branch-name commit-msg)]
+
+                (if-not (:success push-result)
+                  (cleanup-on-failure context (str "Failed to commit/push changes: " (:error push-result)))
+
+                  ;; Step 4: Create draft PR
+                  (let [pr-result (create-draft-pr context)]
+                    (if-not (:success pr-result)
+                      (cleanup-on-failure context (str "PR creation failed: " (:error pr-result)))
+
+                      ;; Step 5: Finalize task
+                      (let [new-title (github/pr-title-formats task :complete)
+                            {:keys [pr-number]} pr-result
+                            update-result (github/update-pr-title (:repo context) pr-number new-title)]
+
+                        (if (:success update-result)
+                          (do
+                            (println "Task completed successfully")
+                            {:status :completed
+                             :task task
+                             :pr-number pr-number
+                             :message "Task completed successfully"})
+                          (do
+                            (println "Warning: Failed to update PR title")
+                            {:status :completed-with-warnings
+                             :task task
+                             :pr-number pr-number
+                             :message "Task completed but PR title update failed"})))))))))))
 
       (catch Exception e
         (cleanup-on-failure context (.getMessage e))))))

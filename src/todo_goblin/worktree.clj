@@ -26,15 +26,23 @@
       (when-not (zero? (:exit fetch-result))
         (println "Warning: Failed to fetch from origin:" (:err fetch-result))))
 
-    ;; Create the worktree
-    (let [result (process/sh ["git" "-C" repo-path "worktree" "add" worktree-path branch-name])]
-      (if (zero? (:exit result))
-        {:success true
-         :worktree-path worktree-path
-         :branch-name branch-name}
-        (do
-          (println "Error creating worktree:" (:err result))
-          {:success false :error (:err result)})))
+    ;; Determine the default branch (main or master)
+    (let [main-check (process/sh ["git" "-C" repo-path "rev-parse" "--verify" "origin/main"])
+          master-check (process/sh ["git" "-C" repo-path "rev-parse" "--verify" "origin/master"])
+          base-branch (cond
+                        (zero? (:exit main-check)) "origin/main"
+                        (zero? (:exit master-check)) "origin/master"
+                        :else "HEAD")]
+
+      ;; Create the worktree with a new branch based on the default branch
+      (let [result (process/sh ["git" "-C" repo-path "worktree" "add" worktree-path "-b" branch-name base-branch])]
+        (if (zero? (:exit result))
+          {:success true
+           :worktree-path worktree-path
+           :branch-name branch-name}
+          (do
+            (println "Error creating worktree:" (:err result))
+            {:success false :error (:err result)}))))
     (catch Exception e
       (println "Error executing git worktree add:" (.getMessage e))
       {:success false :error (.getMessage e)})))

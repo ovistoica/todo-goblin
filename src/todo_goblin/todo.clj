@@ -102,7 +102,7 @@
                        (str/replace #"[^a-z0-9\s]" "")
                        (str/replace #"\s+" "-")
                        (str/trim))]
-    (str "tgbl/" (subs safe-title 0 (min 30 (count safe-title))) "-" (subs (:id task) 0 8))))
+    (str "tgbl-" (subs safe-title 0 (min 30 (count safe-title))) "-" (subs (:id task) 0 8))))
 
 (defn task-summary
   "Generate a human-readable summary of a task"

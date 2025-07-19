@@ -40,12 +40,23 @@ Your current task is:")
     (catch Exception _e
       false)))
 
+(comment
+  @(:out (process/process {:err :inherit
+                           :out *out*} ; stderr goes to console immediately
+                          "claude" "--print" "write a markdown called code description outlining what this project does" "--output-format" "stream-json" "--verbose")))
+
 (defn run-claude-code
-  "Execute Claude Code CLI in the specified worktree with streaming output"
+  "Execute Claude Code CLI in the specified worktree with streaming JSON output"
   [worktree-path task & {:keys [context-files timeout-ms]
                          :or {context-files [] timeout-ms 300000}}] ; 5 minute default
   (when-not (check-claude-code-available)
     (throw (ex-info "Claude Code CLI not available" {:worktree-path worktree-path})))
+
+  ;; Verify worktree directory exists and is accessible
+  (when-not (and (.exists (io/file worktree-path))
+                 (.isDirectory (io/file worktree-path)))
+    (throw (ex-info "Worktree directory does not exist or is not accessible"
+                    {:worktree-path worktree-path})))
 
   (try
     (let [prompt (generate-task-prompt task context-files)]
@@ -55,37 +66,53 @@ Your current task is:")
       (println "Task:" (:title task))
       (println "\n=== Claude Code Output ===")
 
-      ;; Create process with streaming output
+      ;; Use streaming JSON output with verbose logging
       (let [proc (process/process {:dir worktree-path
-                                   :err :inherit} ; stderr goes to console immediately
-                                  "claude" "--print" prompt)
-            reader (io/reader (:out proc))
-            output-lines (atom [])]
+                                   :out :stream
+                                   :err :stream}
+                                  "claude" "--print" "--dangerously-skip-permissions"
+                                  "--output-format" "stream-json" "--verbose" prompt)
+            stdout (-> proc :out io/reader)
+            stderr (-> proc :err io/reader)]
 
-        ;; Read and display output as it streams
-        (try
-          (loop []
-            (when-let [line (.readLine reader)]
-              (println line) ; Display immediately
-              (swap! output-lines conj line)
-              (recur)))
-          (catch java.io.IOException e
-            (println "Stream reading interrupted:" (.getMessage e))))
+        ;; Process streaming output line by line
+        (let [output-lines (atom [])
+              error-lines (atom [])]
 
-        ;; Wait for process completion 
-        (let [result @proc
-              collected-output (str/join "\n" @output-lines)]
+          ;; Read stdout in a separate thread
+          (future
+            (try
+              (doseq [line (line-seq stdout)]
+                (when (seq line)
+                  (swap! output-lines conj line)
+                  (println line))) ; Display each line immediately
+              (catch Exception e
+                (println "Error reading stdout:" (.getMessage e)))))
 
-          (println "=== End Claude Code Output ===\n")
+          ;; Read stderr in a separate thread  
+          (future
+            (try
+              (doseq [line (line-seq stderr)]
+                (when (seq line)
+                  (swap! error-lines conj line)
+                  (println "STDERR:" line)))
+              (catch Exception e
+                (println "Error reading stderr:" (.getMessage e)))))
 
-          (if (zero? (:exit result))
-            {:success true
-             :output collected-output
-             :message "AI task execution completed successfully"}
-            {:success false
-             :error "Claude Code execution failed"
-             :output collected-output
-             :exit-code (:exit result)}))))
+          ;; Wait for process completion
+          (let [exit-code @(:exit proc)]
+            (println "=== End Claude Code Output ===\n")
+
+            (if (zero? exit-code)
+              {:success true
+               :output (str/join "\n" @output-lines)
+               :json-lines @output-lines
+               :message "AI task execution completed successfully"}
+              {:success false
+               :error (str/join "\n" @error-lines)
+               :output (str/join "\n" @output-lines)
+               :json-lines @output-lines
+               :exit-code exit-code})))))
 
     (catch java.util.concurrent.TimeoutException e
       {:success false

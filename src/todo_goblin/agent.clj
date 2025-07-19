@@ -43,7 +43,17 @@
   (let [{:keys [repo-path worktree-path branch-name]} context]
     (println (str "Creating worktree: " worktree-path))
     (println (str "Branch: " branch-name))
-    (worktree/create-worktree repo-path worktree-path branch-name)))
+    (let [result (worktree/create-worktree repo-path worktree-path branch-name)]
+      (if (:success result)
+        (do
+          ;; Verify the worktree directory is accessible
+          (Thread/sleep 100) ; Brief pause to ensure filesystem sync
+          (if (and (.exists (clojure.java.io/file worktree-path))
+                   (.isDirectory (clojure.java.io/file worktree-path)))
+            result
+            {:success false
+             :error (str "Worktree directory not accessible after creation: " worktree-path)}))
+        result))))
 
 (defn create-draft-pr
   "Create a draft PR for the task"
